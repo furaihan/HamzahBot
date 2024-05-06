@@ -1,0 +1,2 @@
+# HamzahBot
+My discord bot
