@@ -6,13 +6,6 @@ using Microsoft.Extensions.DependencyInjection;
 using ProjectAsad.Services;
 using Discord.Interactions;
 
-// get all files in the current directory
-//string[] files = Directory.GetFiles(Directory.GetCurrentDirectory());
-//Console.WriteLine("Files in the current directory:");
-//foreach (string file in files)
-//{
-//    Console.WriteLine(file);
-//}
 
 using IHost host = Host.CreateDefaultBuilder(args)
                 .ConfigureAppConfiguration(config =>
@@ -25,6 +18,7 @@ using IHost host = Host.CreateDefaultBuilder(args)
                     services.AddSingleton<DiscordSocketClient>();
                     services.AddSingleton<InteractionService>();
                     services.AddSingleton<JokeService>();
+                    services.AddSingleton<JikanService>();
                     services.AddHostedService<DiscordService>();
                     services.AddHostedService<DiscordInteractionService>();
                     services.AddHttpClient();
