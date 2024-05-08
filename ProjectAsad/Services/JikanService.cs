@@ -2,75 +2,63 @@
 using Microsoft.Extensions.Logging;
 using ProjectAsad.Model;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace ProjectAsad.Services
 {
     internal class JikanService
     {
-        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly HttpClient _httpClient;
         private readonly IConfiguration _config;
         private readonly ILogger<JikanService> _logger;
         private readonly string _baseUrl;
 
         public JikanService(IHttpClientFactory httpClientFactory, IConfiguration config, ILogger<JikanService> logger)
         {
-            _httpClientFactory = httpClientFactory;
+            _httpClient = httpClientFactory.CreateClient();
+            _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
+            _httpClient.DefaultRequestHeaders.Add("User-Agent", "HamzahBot on discord");
             _config = config;
             _logger = logger;
-
-            _baseUrl = _config.GetSection("Api")["Jikan"] ?? "https://api.jikan.moe/v4";
+            _baseUrl = _config.GetValue<string>("Api:Jikan") ?? "https://api.jikan.moe/v4";
         }
+
         public async Task<Anime?> GetFirstAnimeByQuery(string query)
         {
             try
             {
-                var client = _httpClientFactory.CreateClient();
-                client.DefaultRequestHeaders.Add("Accept", "application/json");
-                client.DefaultRequestHeaders.Add("User-Agent", "HamzahBot on discord");
-                var response = await client.GetAsync($"{_baseUrl}/anime?q={query}");
-                if (!response.IsSuccessStatusCode)
-                {
-                    _logger.LogError("Failed to get anime from Jikan API: {StatusCode}", response.StatusCode);
-                    return null;
-                }
-                var json = await response.Content.ReadAsStringAsync();
-                var firstAnime = JsonSerializer.Deserialize<JsonElement>(json).GetProperty("data").EnumerateArray().FirstOrDefault();
+                var response = await _httpClient.GetAsync($"{_baseUrl}/anime?q={query}");
+                response.EnsureSuccessStatusCode();
 
-                Anime anime = new()
+                var json = await response.Content.ReadAsStreamAsync();
+                var data = await JsonNode.ParseAsync(json).ConfigureAwait(false);
+                var firstAnime = data?["data"]?.AsArray().FirstOrDefault();
+
+                if (firstAnime == null)
+                    return null;
+
+                return new Anime
                 {
-                    Titles = firstAnime.GetProperty("titles").EnumerateArray().Select(title => new AnimeTitle
-                    {
-                        Title = title.GetProperty("title").GetString() ?? "",
-                        Type = title.GetProperty("type").GetString() ?? ""
-                    }).ToList(),
-                    ImageUrl = firstAnime.GetProperty("images")
-                                         .GetProperty("webp")
-                                         .GetProperty("large_image_url")
-                                         .GetString() ?? "",
-                    Status = firstAnime.GetProperty("status")
-                                       .GetString() ?? "",
-                    Synopsis = firstAnime.GetProperty("synopsis")
-                                         .GetString(),
-                    Genres = firstAnime.GetProperty("genres")
-                                       .EnumerateArray()
-                                       .Select(genre=> genre.GetProperty("name").GetString() ?? "").ToList(),
-                    Demographics = firstAnime.GetProperty("demographics")
-                                             .EnumerateArray() 
-                                             .Select(demographic => demographic.GetProperty("name").GetString() ?? "").ToList(),
-                    Themes = firstAnime.GetProperty("themes")
-                                       .EnumerateArray()
-                                       .Select(theme => theme.GetProperty("name").GetString() ?? "").ToList(),
-                    Producers = firstAnime.GetProperty("producers")
-                                          .EnumerateArray()
-                                          .Select(producer => producer.GetProperty("name").GetString() ?? "").ToList(),
-                    Studios = firstAnime.GetProperty("studios")
-                                        .EnumerateArray()
-                                        .Select(studio => studio.GetProperty("name").GetString() ?? "").ToList(),
-                    Licensors = firstAnime.GetProperty("licensors")
-                                          .EnumerateArray()
-                                          .Select(licensor => licensor.GetProperty("name").GetString() ?? "").ToList()
+                    Titles = firstAnime["titles"]?.AsArray()
+                        .Select(title => new AnimeTitle
+                        {
+                            Title = title?["title"]?.GetValue<string>() ?? string.Empty,
+                            Type = title?["type"]?.GetValue<string>() ?? string.Empty
+                        })
+                        .ToList() ?? [],
+                    ImageUrl = firstAnime["images"]?["webp"]?["large_image_url"]?.GetValue<string>() ?? string.Empty,
+                    Status = firstAnime["status"]?.GetValue<string>() ?? string.Empty,
+                    Synopsis = firstAnime["synopsis"]?.GetValue<string>() ?? string.Empty,
+                    Episodes = firstAnime["episodes"]?.GetValue<int>(),
+                    Score = firstAnime["score"]?.GetValue<float>(),
+                    Popularity = firstAnime["popularity"]?.GetValue<int>(),
+                    Genres = firstAnime["genres"]?.AsArray().Select(genre => genre?["name"]?.GetValue<string>() ?? string.Empty).ToList() ?? [],
+                    Demographics = firstAnime["demographics"]?.AsArray().Select(demographic => demographic?["name"]?.GetValue<string>() ?? string.Empty).ToList() ?? [],
+                    Themes = firstAnime["themes"]?.AsArray().Select(theme => theme?["name"]?.GetValue<string>() ?? string.Empty).ToList() ?? [],
+                    Producers = firstAnime["producers"]?.AsArray().Select(producer => producer?["name"]?.GetValue<string>() ?? string.Empty).ToList() ?? [],
+                    Studios = firstAnime["studios"]?.AsArray().Select(studio => studio?["name"]?.GetValue<string>() ?? string.Empty).ToList() ?? [],
+                    Licensors = firstAnime["licensors"]?.AsArray().Select(licensor => licensor?["name"]?.GetValue<string>() ?? string.Empty).ToList() ?? []
                 };
-                return anime;
             }
             catch (Exception ex)
             {

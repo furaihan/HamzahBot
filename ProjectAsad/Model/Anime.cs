@@ -14,6 +14,9 @@ namespace ProjectAsad.Model
         public required string ImageUrl { get; set; }
         public required string Status { get; set; }
         public string? Synopsis { get; set; }
+        public int? Episodes { get; set; }
+        public float? Score { get; set; }
+        public int? Popularity { get; set; }
         public List<string> Genres { get; set; } = [];
         public List<string> Demographics { get; set; } = [];
         public List<string> Themes { get; set; } = [];
