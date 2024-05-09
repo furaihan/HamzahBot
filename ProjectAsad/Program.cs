@@ -19,6 +19,7 @@ using IHost host = Host.CreateDefaultBuilder(args)
                     services.AddSingleton<InteractionService>();
                     services.AddSingleton<JokeService>();
                     services.AddSingleton<JikanService>();
+                    services.AddSingleton<HasanService>();
                     services.AddHostedService<DiscordService>();
                     services.AddHostedService<DiscordInteractionService>();
                     services.AddHttpClient();
