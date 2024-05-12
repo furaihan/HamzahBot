@@ -1,6 +1,7 @@
 ﻿using Discord.Interactions;
 using Microsoft.Extensions.Logging;
 using ProjectAsad.Services;
+using Discord;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -45,16 +46,19 @@ namespace ProjectAsad.Modules
                 return;
             }
 
-            var sb = new StringBuilder();
-            sb.AppendLine($"Prayer schedule for {prayerCity?.Name} ({DateTime.Today:dd MMMM yyyy})");
-            sb.AppendLine();
-            sb.AppendLine($"Fajr: {prayerSchedule.Fajr}");
-            sb.AppendLine($"Dhuhr: {prayerSchedule.Dhuhr}");
-            sb.AppendLine($"Asr: {prayerSchedule.Asr}");
-            sb.AppendLine($"Maghrib: {prayerSchedule.Maghrib}");
-            sb.AppendLine($"Isha: {prayerSchedule.Isha}");
+            EmbedBuilder embedBuilder = new();
+            embedBuilder.WithTitle($"Prayer Schedule for {prayerCity?.Name}");
+            embedBuilder.WithDescription($"Today's prayer schedule for {prayerCity?.Name}");
+            embedBuilder.AddField("Fajr", prayerSchedule.Fajr, inline: true);
+            embedBuilder.AddField("Sunrise", prayerSchedule.Sunrise, inline: true);
+            embedBuilder.AddField("Dhuhr", prayerSchedule.Dhuhr, inline: true);
+            embedBuilder.AddField("Asr", prayerSchedule.Asr, inline: true);
+            embedBuilder.AddField("Maghrib", prayerSchedule.Maghrib, inline: true);
+            embedBuilder.AddField("Isha", prayerSchedule.Isha, inline: true);
+            embedBuilder.WithFooter("Prayer schedule from myquran.com");
+            embedBuilder.WithColor(Color.Green);
 
-            await RespondAsync(sb.ToString());
+            await RespondAsync(embed: embedBuilder.Build());
         }
     }
 }

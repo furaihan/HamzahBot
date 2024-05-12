@@ -16,7 +16,7 @@ using IHost host = Host.CreateDefaultBuilder(args)
                 .ConfigureServices((context, services) =>
                 {
                     services.AddSingleton<DiscordSocketClient>();
-                    services.AddSingleton<InteractionService>();
+                    services.AddSingleton(p => new InteractionService(p.GetRequiredService<DiscordSocketClient>()));
                     services.AddSingleton<JokeService>();
                     services.AddSingleton<JikanService>();
                     services.AddSingleton<HasanService>();
