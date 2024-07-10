@@ -65,6 +65,9 @@ namespace ProjectAsad.Services
             await _interaction.AddModuleAsync(typeof(JokeModule), _service);
             await _interaction.AddModuleAsync(typeof(AnimeModule), _service);
             await _interaction.AddModuleAsync(typeof(IslamicModule), _service);
+            await _interaction.AddModuleAsync(typeof(MLModule), _service);
+
+            _logger.LogInformation("All Commands registered");
         }
 
         public Task StopAsync(CancellationToken cancellationToken)

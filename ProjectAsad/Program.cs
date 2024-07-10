@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ProjectAsad.Services;
 using Discord.Interactions;
+using Microsoft.Extensions.Logging;
 
 
 using IHost host = Host.CreateDefaultBuilder(args)
@@ -13,6 +14,10 @@ using IHost host = Host.CreateDefaultBuilder(args)
                     config.SetBasePath(Directory.GetCurrentDirectory());
                     config.AddIniFile("appsettings.ini");
                 })
+                .ConfigureLogging(logging =>
+                {
+                    logging.SetMinimumLevel(LogLevel.Debug);
+                })
                 .ConfigureServices((context, services) =>
                 {
                     services.AddSingleton<DiscordSocketClient>();
@@ -20,6 +25,7 @@ using IHost host = Host.CreateDefaultBuilder(args)
                     services.AddSingleton<JokeService>();
                     services.AddSingleton<JikanService>();
                     services.AddSingleton<HasanService>();
+                    services.AddSingleton<ZhafarServices>();
                     services.AddHostedService<DiscordService>();
                     services.AddHostedService<DiscordInteractionService>();
                     services.AddHttpClient();
