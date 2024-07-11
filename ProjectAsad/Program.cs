@@ -14,10 +14,6 @@ using IHost host = Host.CreateDefaultBuilder(args)
                     config.SetBasePath(Directory.GetCurrentDirectory());
                     config.AddIniFile("appsettings.ini");
                 })
-                .ConfigureLogging(logging =>
-                {
-                    logging.SetMinimumLevel(LogLevel.Debug);
-                })
                 .ConfigureServices((context, services) =>
                 {
                     services.AddSingleton<DiscordSocketClient>();
