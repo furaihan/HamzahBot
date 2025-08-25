@@ -13,6 +13,7 @@ namespace ProjectAsad.Services
         private readonly IConfiguration _config;
         private readonly ILogger<ZhafarServices> _logger;
         private readonly string _baseUrl;
+        private readonly string _baseUrl2 = "http://cb.zhafar.id";
 
         public ZhafarServices(IHttpClientFactory httpClientFactory, IConfiguration config, ILogger<ZhafarServices> logger)
         {
@@ -65,6 +66,38 @@ namespace ProjectAsad.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error while checking clickbait");
+            }
+            return null;
+        }
+        public async Task<ClickbaitResponse2?> GetClickbaitResponse2Async(string text)
+        {
+            try
+            {
+                var requestData = new { text };
+                var json = JsonSerializer.Serialize(requestData);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync($"{_baseUrl2}/predict", content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseString = await response.Content.ReadAsStringAsync();
+                    var responseData = JsonSerializer.Deserialize<ClickbaitResponse2>(responseString);
+
+                    if (responseData != null)
+                    {
+                        _logger.LogInformation($"Clickbait v2 check result: {responseData.IsClickbait} (Probability: {string.Join(", ", responseData.ClickbaitProbability ?? [])})");
+                        return responseData;
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning($"API returned non-success status code: {response.StatusCode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error while checking clickbait v2");
             }
             return null;
         }
