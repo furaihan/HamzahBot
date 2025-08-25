@@ -28,64 +28,135 @@ namespace ProjectAsad.Modules
         public async Task CheckClickbait([Summary(name: "text", description: "text to check")] string text)
         {
             await DeferAsync(); // Defer the response as the API call might take some time
-
             ClickbaitResponse? clickbaitResponse = await _zhafarServices.GetClickbaitResponseAsync(text);
 
             var embedBuilder = new EmbedBuilder();
 
             if (clickbaitResponse is not null)
             {
-                embedBuilder.WithTitle("Clickbait Analysis")
-                    .WithDescription($"Analyzed text: {text}")
-                    .WithColor(clickbaitResponse.IsClickbait ? Color.Red : Color.Green)
-                    .AddField("Is Clickbait", clickbaitResponse.IsClickbait ? "Yes" : "No", true)
-                    .AddField("Confidence", $"{clickbaitResponse.ClickbaitProbability:P2}", true)
-                    .AddField("Prediction", clickbaitResponse.Prediction, true)
-                    .WithFooter($"Status: {clickbaitResponse.Status}")
+                var isClickbait = clickbaitResponse.IsClickbait == 1;
+                var confidencePercentage = clickbaitResponse.ClickbaitProbability?.GetValueOrDefault("1", 0.0) ?? 0.0;
+
+                Color embedColor = GetConfidenceColor(confidencePercentage, isClickbait);
+
+                var statusEmoji = isClickbait ? "🚨" : "✅";
+                var confidenceEmoji = GetConfidenceEmoji(confidencePercentage);
+
+                embedBuilder
+                    .WithTitle($"{statusEmoji} Clickbait Analysis Results")
+                    .WithDescription($"📝 **Analyzed Text:**\n> {(text.Length > 100 ? text.Substring(0, 100) + "..." : text)}")
+                    .WithColor(embedColor);
+
+                var resultValue = isClickbait
+                    ? $"**🎯 CLICKBAIT DETECTED**\nThis content appears to use clickbait tactics"
+                    : $"**📰 LEGITIMATE CONTENT**\nThis content appears to be genuine";
+
+                embedBuilder.AddField($"{statusEmoji} Verdict", resultValue, false);
+
+                var confidenceBar = CreateProgressBar(confidencePercentage, 10);
+                embedBuilder.AddField(
+                    $"{confidenceEmoji} Confidence Level",
+                    $"**{confidencePercentage:P1}**\n{confidenceBar}\n{GetConfidenceDescription(confidencePercentage)}",
+                    true
+                );
+
+                embedBuilder.AddField(
+                    "🔍 Prediction",
+                    $"```{clickbaitResponse.Prediction?.ToUpper()}```",
+                    true
+                );
+
+                if (clickbaitResponse.ClickbaitProbability != null)
+                {
+                    var legitProb = clickbaitResponse.ClickbaitProbability.GetValueOrDefault("0", 0.0);
+                    var clickbaitProb = clickbaitResponse.ClickbaitProbability.GetValueOrDefault("1", 0.0);
+
+                    embedBuilder.AddField(
+                        "📊 Probability Breakdown",
+                        $"📰 Legitimate: **{legitProb:P1}**\n🎯 Clickbait: **{clickbaitProb:P1}**",
+                        false
+                    );
+                }
+
+                embedBuilder
+                    .WithFooter($"✨ Analysis completed • Status: {clickbaitResponse.Status} • Powered by AI",
+                               "https://cdn.discordapp.com/emojis/1234567890123456789.png") // Optional: Add your bot's icon
                     .WithCurrentTimestamp();
             }
             else
             {
-                embedBuilder.WithTitle("Clickbait Analysis Error")
-                    .WithDescription("Sorry, there was an error processing your request.")
-                    .WithColor(Color.Red)
-                    .AddField("Analyzed Text", text)
-                    .WithFooter("Please try again later.")
+                embedBuilder
+                    .WithTitle("❌ Analysis Error")
+                    .WithDescription("🚫 **Oops! Something went wrong**\nWe encountered an issue while analyzing your text.")
+                    .WithColor(Color.DarkRed)
+                    .AddField("📝 Your Text", $"> {(text.Length > 100 ? text.Substring(0, 100) + "..." : text)}", false)
+                    .AddField("🔧 What to do?", "• Try again in a few moments\n• Check if your text is valid\n• Contact support if the issue persists", false)
+                    .WithFooter("⚠️ Error occurred • Please try again later")
                     .WithCurrentTimestamp();
             }
 
             await FollowupAsync(embed: embedBuilder.Build());
         }
-        [SlashCommand("clickbait2", "Check if a text is clickbait v2")]
-        public async Task CheckClickbait2([Summary(name: "text", description: "text to check")] string text)
+
+        private Color GetConfidenceColor(double confidence, bool isClickbait)
         {
-            await DeferAsync(); // Defer the response as the API call might take some time
-            ClickbaitResponse2? clickbaitResponse = await _zhafarServices.GetClickbaitResponse2Async(text);
-
-            var embedBuilder = new EmbedBuilder();
-
-            if (clickbaitResponse is not null)
+            if (isClickbait)
             {
-                embedBuilder.WithTitle("Clickbait v2 Analysis")
-                    .WithDescription($"Analyzed text: {text}")
-                    .WithColor(clickbaitResponse.IsClickbait == 1 ? Color.Red : Color.Green)
-                    .AddField("Is Clickbait", clickbaitResponse.IsClickbait == 1 ? "Yes" : "No", true)
-                    .AddField("Confidence", $"{clickbaitResponse.ClickbaitProbability:P2}", true)
-                    .AddField("Prediction", clickbaitResponse.Prediction, true)
-                    .WithFooter($"Status: {clickbaitResponse.Status}")
-                    .WithCurrentTimestamp();
+                return confidence switch
+                {
+                    >= 0.9 => Color.DarkRed,
+                    >= 0.7 => Color.Red,
+                    >= 0.5 => Color.Orange,
+                    _ => Color.Gold
+                };
             }
             else
             {
-                embedBuilder.WithTitle("Clickbait v2 Analysis Error")
-                    .WithDescription("Sorry, there was an error processing your request.")
-                    .WithColor(Color.Red)
-                    .AddField("Analyzed Text", text)
-                    .WithFooter("Please try again later.")
-                    .WithCurrentTimestamp();
+                return confidence switch
+                {
+                    >= 0.9 => Color.DarkGreen,
+                    >= 0.7 => Color.Green,
+                    >= 0.5 => Color.Gold,
+                    _ => Color.Gold
+                };
             }
+        }
 
-            await FollowupAsync(embed: embedBuilder.Build());
+        private string GetConfidenceEmoji(double confidence)
+        {
+            return confidence switch
+            {
+                >= 0.95 => "🔥", // Very high confidence
+                >= 0.85 => "⚡", // High confidence
+                >= 0.70 => "💪", // Good confidence
+                >= 0.60 => "👍", // Moderate confidence
+                >= 0.50 => "🤔", // Low confidence
+                _ => "❓"        // Very low confidence
+            };
+        }
+
+        private string CreateProgressBar(double percentage, int length = 10)
+        {
+            int filled = (int)Math.Round(percentage * length);
+            int empty = length - filled;
+
+            string filledBar = new string('█', filled);
+            string emptyBar = new string('░', empty);
+
+            return $"`{filledBar}{emptyBar}`";
+        }
+
+        private string GetConfidenceDescription(double confidence)
+        {
+            return confidence switch
+            {
+                >= 0.95 => "*Extremely confident*",
+                >= 0.85 => "*Very confident*",
+                >= 0.70 => "*Confident*",
+                >= 0.60 => "*Moderately confident*",
+                >= 0.50 => "*Somewhat uncertain*",
+                _ => "*Low confidence*"
+            };
         }
     }
 }

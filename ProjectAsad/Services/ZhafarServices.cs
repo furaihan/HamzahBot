@@ -28,24 +28,16 @@ namespace ProjectAsad.Services
                 logger.LogWarning("Api:Zhafar is not configured");
             }
         }
-        public async Task<bool?> GetIsClickbait(string text)
-        {
-            var response = await GetClickbaitResponseAsync(text);
-            if (response != null)
-            {
-                return response.IsClickbait;
-            }
-            return null;
-        }
         public async Task<ClickbaitResponse?> GetClickbaitResponseAsync(string text)
         {
             try
             {
-                var requestData = new { headline = text };
+                var requestData = new { text };
                 var json = JsonSerializer.Serialize(requestData);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                var response = await _httpClient.PostAsync($"{_baseUrl}/predict", content);
+                // Use the v2 clickbait endpoint as the primary source
+                var response = await _httpClient.PostAsync($"{_baseUrl2}/predict", content);
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -54,7 +46,7 @@ namespace ProjectAsad.Services
 
                     if (responseData != null)
                     {
-                        _logger.LogInformation($"Clickbait check result: {responseData.IsClickbait} (Probability: {responseData.ClickbaitProbability})");
+                        _logger.LogInformation($"Clickbait check result: {responseData.IsClickbait} (Probability: {string.Join(", ", responseData.ClickbaitProbability ?? new Dictionary<string, double>())})");
                         return responseData;
                     }
                 }
@@ -66,38 +58,6 @@ namespace ProjectAsad.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error while checking clickbait");
-            }
-            return null;
-        }
-        public async Task<ClickbaitResponse2?> GetClickbaitResponse2Async(string text)
-        {
-            try
-            {
-                var requestData = new { text };
-                var json = JsonSerializer.Serialize(requestData);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                var response = await _httpClient.PostAsync($"{_baseUrl2}/predict", content);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var responseString = await response.Content.ReadAsStringAsync();
-                    var responseData = JsonSerializer.Deserialize<ClickbaitResponse2>(responseString);
-
-                    if (responseData != null)
-                    {
-                        _logger.LogInformation($"Clickbait v2 check result: {responseData.IsClickbait} (Probability: {string.Join(", ", responseData.ClickbaitProbability ?? [])})");
-                        return responseData;
-                    }
-                }
-                else
-                {
-                    _logger.LogWarning($"API returned non-success status code: {response.StatusCode}");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error while checking clickbait v2");
             }
             return null;
         }

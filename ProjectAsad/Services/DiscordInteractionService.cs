@@ -57,7 +57,20 @@ namespace ProjectAsad.Services
         }
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            _discord.Ready += () => _interaction.RegisterCommandsGloballyAsync(true);
+            // Register commands when the client is ready. Await inside the handler so failures are logged.
+            _discord.Ready += async () =>
+            {
+                try
+                {
+                    await _interaction.RegisterCommandsGloballyAsync(true);
+                    _logger.LogInformation("Commands registered globally on Ready.");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to register commands globally on Ready.");
+                }
+            };
+
             _discord.InteractionCreated += OnInteractionAsync;
             _logger.LogInformation("Registering commands...");
 
@@ -72,6 +85,8 @@ namespace ProjectAsad.Services
 
         public Task StopAsync(CancellationToken cancellationToken)
         {
+            // Unsubscribe to avoid dangling handlers and dispose the interaction service.
+            _discord.InteractionCreated -= OnInteractionAsync;
             _interaction.Dispose();
             return Task.CompletedTask;
         }
@@ -81,23 +96,33 @@ namespace ProjectAsad.Services
             try
             {
                 var context = new SocketInteractionContext(_discord, interaction);
-                var result = _interaction.ExecuteCommandAsync(context, _service);
 
+                // Await the execution so exceptions are surfaced here and the result can be inspected.
+                var result = await _interaction.ExecuteCommandAsync(context, _service);
 
-                if (!result.IsCompletedSuccessfully)
+                if (result is not null && !result.IsSuccess)
                 {
-                    _logger.LogError("Command execution failed: {Error}", result.Exception);
-                    await context.Channel.SendMessageAsync($"Error: {result}");
+                    _logger.LogError("Command execution failed: {Error}", result.ErrorReason ?? "Unknown");
+                    if (context.Channel != null)
+                        await context.Channel.SendMessageAsync($"Error: {result.ErrorReason}");
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Unhandled exception while executing interaction");
+
                 if (interaction.Type == InteractionType.ApplicationCommand)
                 {
-                    await interaction.GetOriginalResponseAsync().ContinueWith(msg => 
-                    { 
-                        msg.Result.DeleteAsync();
-                    });
+                    try
+                    {
+                        var original = await interaction.GetOriginalResponseAsync();
+                        if (original != null)
+                            await original.DeleteAsync();
+                    }
+                    catch (Exception delEx)
+                    {
+                        _logger.LogError(delEx, "Failed to delete original response after exception");
+                    }
                 }
             }
         }
