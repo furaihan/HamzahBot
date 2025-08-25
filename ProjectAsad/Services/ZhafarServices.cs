@@ -20,6 +20,7 @@ namespace ProjectAsad.Services
             _httpClient = httpClientFactory.CreateClient();
             _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "HamzahBot on discord");
+            _httpClient.Timeout = TimeSpan.FromMilliseconds(2890); // Set a timeout for the HTTP client
             this._config = config;
             this._logger = logger;
             _baseUrl = this._config.GetValue<string>("Api:Zhafar") ?? "";
@@ -32,12 +33,14 @@ namespace ProjectAsad.Services
         {
             try
             {
+                _logger.LogDebug("Sending clickbait check request");
                 var requestData = new { text };
                 var json = JsonSerializer.Serialize(requestData);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 // Use the v2 clickbait endpoint as the primary source
                 var response = await _httpClient.PostAsync($"{_baseUrl2}/predict", content);
+                _logger.LogDebug("Received response from clickbait API");
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -54,6 +57,10 @@ namespace ProjectAsad.Services
                 {
                     _logger.LogWarning($"API returned non-success status code: {response.StatusCode}");
                 }
+            }
+            catch (HttpRequestException httpEx)
+            {
+                _logger.LogError(httpEx, "HTTP error while checking clickbait");
             }
             catch (Exception ex)
             {
