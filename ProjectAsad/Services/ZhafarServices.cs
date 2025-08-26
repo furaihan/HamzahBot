@@ -13,7 +13,11 @@ namespace ProjectAsad.Services
         private readonly IConfiguration _config;
         private readonly ILogger<ZhafarServices> _logger;
         private readonly string _baseUrl;
-        private readonly string _baseUrl2 = "http://cb.zhafar.id";
+        private readonly JsonSerializerOptions _jsonSerializerOptions = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = false
+        };
 
         public ZhafarServices(IHttpClientFactory httpClientFactory, IConfiguration config, ILogger<ZhafarServices> logger)
         {
@@ -21,51 +25,89 @@ namespace ProjectAsad.Services
             _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "HamzahBot on discord");
             _httpClient.Timeout = TimeSpan.FromMilliseconds(2890); // Set a timeout for the HTTP client
-            this._config = config;
-            this._logger = logger;
-            _baseUrl = this._config.GetValue<string>("Api:Zhafar") ?? "";
+            _config = config;
+            _logger = logger;
+            _baseUrl = _config.GetValue<string>("Api:Zhafar") ?? "http://cb.zhafar.id";
             if (string.IsNullOrEmpty(_baseUrl))
             {
                 logger.LogWarning("Api:Zhafar is not configured");
             }
         }
-        public async Task<ClickbaitResponse?> GetClickbaitResponseAsync(string text)
+        public async Task<ClickbaitResponse?> GetClickbaitResponseAsync(string text, CancellationToken cancellationToken = default)
         {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                _logger.LogWarning("Empty or null text provided for clickbait check");
+                return null;
+            }
+
             try
             {
-                _logger.LogDebug("Sending clickbait check request");
-                var requestData = new { text };
-                var json = JsonSerializer.Serialize(requestData);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                _logger.LogDebug("Sending clickbait check request for text length: {TextLength}", text.Length);
 
-                // Use the v2 clickbait endpoint as the primary source
-                var response = await _httpClient.PostAsync($"{_baseUrl2}/predict", content);
-                _logger.LogDebug("Received response from clickbait API");
+                var requestData = new { text };
+                var json = JsonSerializer.Serialize(requestData, _jsonSerializerOptions);
+
+                using var content = new StringContent(json, Encoding.UTF8, "application/json");
+                using var response = await _httpClient.PostAsync($"{_baseUrl}/predict", content, cancellationToken);
+
+                _logger.LogDebug("Received response from clickbait API with status: {StatusCode}", response.StatusCode);
 
                 if (response.IsSuccessStatusCode)
                 {
-                    var responseString = await response.Content.ReadAsStringAsync();
-                    var responseData = JsonSerializer.Deserialize<ClickbaitResponse>(responseString);
+                    var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                    if (string.IsNullOrWhiteSpace(responseString))
+                    {
+                        _logger.LogWarning("Received empty response from clickbait API");
+                        return null;
+                    }
+
+                    var responseData = JsonSerializer.Deserialize<ClickbaitResponse>(responseString, _jsonSerializerOptions);
 
                     if (responseData != null)
                     {
-                        _logger.LogInformation($"Clickbait check result: {responseData.IsClickbait} (Probability: {string.Join(", ", responseData.ClickbaitProbability ?? new Dictionary<string, double>())})");
+                        var probabilityLog = responseData.ClickbaitProbability?.Any() == true
+                            ? string.Join(", ", responseData.ClickbaitProbability.Select(kvp => $"{kvp.Key}: {kvp.Value:F3}"))
+                            : "No probability data";
+
+                        _logger.LogInformation("Clickbait check result: {IsClickbait} (Probabilities: {Probabilities})",
+                            responseData.IsClickbait, probabilityLog);
                         return responseData;
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Failed to deserialize clickbait API response");
                     }
                 }
                 else
                 {
-                    _logger.LogWarning($"API returned non-success status code: {response.StatusCode}");
+                    var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                    _logger.LogWarning("API returned non-success status code: {StatusCode}. Response: {ErrorContent}",
+                        response.StatusCode, errorContent);
                 }
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                _logger.LogError("Timeout while checking clickbait: {Message}", ex.Message);
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogInformation("Clickbait check was cancelled: {Message}", ex.Message);
             }
             catch (HttpRequestException httpEx)
             {
-                _logger.LogError(httpEx, "HTTP error while checking clickbait");
+                _logger.LogError(httpEx, "HTTP error while checking clickbait: {Message}", httpEx.Message);
+            }
+            catch (JsonException jsonEx)
+            {
+                _logger.LogError(jsonEx, "JSON deserialization error while checking clickbait: {Message}", jsonEx.Message);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error while checking clickbait");
+                _logger.LogError(ex, "Unexpected error while checking clickbait: {Message}", ex.Message);
             }
+
             return null;
         }
     }
