@@ -17,10 +17,10 @@ namespace ProjectAsad.Services
         private readonly IServiceProvider _service;
         private readonly ILogger<InteractionService> _logger;
 
-        public DiscordInteractionService(InteractionService interaction, 
-                                        DiscordSocketClient discord, 
-                                        IConfiguration config, 
-                                        IServiceProvider service, 
+        public DiscordInteractionService(InteractionService interaction,
+                                        DiscordSocketClient discord,
+                                        IConfiguration config,
+                                        IServiceProvider service,
                                         ILogger<InteractionService> logger)
         {
             _interaction = interaction;
@@ -97,34 +97,121 @@ namespace ProjectAsad.Services
             {
                 var context = new SocketInteractionContext(_discord, interaction);
 
-                // Await the execution so exceptions are surfaced here and the result can be inspected.
+                // Safety net: defer if it looks like it might take a while
+                // Only for slash commands that haven't been deferred yet
+                if (interaction is ISlashCommandInteraction slashCmd && !interaction.HasResponded)
+                {
+                    // Optional: defer here as safety net for slow command resolution
+                    // await slashCmd.DeferAsync();
+                }
+
                 var result = await _interaction.ExecuteCommandAsync(context, _service);
 
+                // Handle command execution failures
                 if (result is not null && !result.IsSuccess)
                 {
-                    _logger.LogError("Command execution failed: {Error}", result.ErrorReason ?? "Unknown");
-                    if (context.Channel != null)
-                        await context.Channel.SendMessageAsync($"Error: {result.ErrorReason}");
+                    _logger.LogError("Command execution failed: {Error} for command {Command}",
+                        result.ErrorReason ?? "Unknown",
+                        interaction is ISlashCommandInteraction cmd ? cmd.Data.Name : "Unknown");
+
+                    // Properly respond to the interaction
+                    await RespondToInteractionError(interaction, result.ErrorReason ?? "Command failed");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unhandled exception while executing interaction");
+                _logger.LogError(ex, "Unhandled exception while executing interaction {InteractionId} from user {UserId}",
+                    interaction.Id, interaction.User.Id);
 
-                if (interaction.Type == InteractionType.ApplicationCommand)
+                // Try to respond to the user about the error
+                await HandleInteractionException(interaction, ex);
+            }
+        }
+
+        private async Task RespondToInteractionError(SocketInteraction interaction, string error)
+        {
+            try
+            {
+                var userFriendlyError = GetUserFriendlyError(error);
+
+                if (!interaction.HasResponded)
                 {
-                    try
+                    if (interaction is ISlashCommandInteraction slashCmd)
                     {
-                        var original = await interaction.GetOriginalResponseAsync();
-                        if (original != null)
-                            await original.DeleteAsync();
+                        await slashCmd.RespondAsync($"❌ {userFriendlyError}", ephemeral: true);
                     }
-                    catch (Exception delEx)
+                }
+                else
+                {
+                    // If already responded/deferred, use follow-up
+                    if (interaction is ISlashCommandInteraction slashCmd)
                     {
-                        _logger.LogError(delEx, "Failed to delete original response after exception");
+                        await slashCmd.FollowupAsync($"❌ {userFriendlyError}", ephemeral: true);
                     }
                 }
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send error response to user");
+
+                // Last resort: try sending to channel if we have context
+                try
+                {
+                    if (interaction.Channel != null)
+                    {
+                        await interaction.Channel.SendMessageAsync($"❌ Something went wrong with that command.");
+                    }
+                }
+                catch
+                {
+                    // Give up - at least we logged it
+                }
+            }
+        }
+
+        private async Task HandleInteractionException(SocketInteraction interaction, Exception ex)
+        {
+            try
+            {
+                if (!interaction.HasResponded)
+                {
+                    if (interaction is ISlashCommandInteraction slashCmd)
+                    {
+                        await slashCmd.RespondAsync("❌ An unexpected error occurred. Please try again later.", ephemeral: true);
+                    }
+                }
+                else
+                {
+                    // Already responded, try to follow up
+                    if (interaction is ISlashCommandInteraction slashCmd)
+                    {
+                        await slashCmd.FollowupAsync("❌ An unexpected error occurred. Please try again later.", ephemeral: true);
+                    }
+                }
+            }
+            catch (Exception responseEx)
+            {
+                _logger.LogError(responseEx, "Failed to respond to user after exception");
+
+                // Don't try to delete original response - if we're here, 
+                // the interaction likely failed before any response was sent
+            }
+        }
+
+        private static string GetUserFriendlyError(string technicalError)
+        {
+            return technicalError switch
+            {
+                var error when error.Contains("permission", StringComparison.OrdinalIgnoreCase)
+                    => "You don't have permission to use this command.",
+                var error when error.Contains("timeout", StringComparison.OrdinalIgnoreCase)
+                    => "The command timed out. Please try again.",
+                var error when error.Contains("rate", StringComparison.OrdinalIgnoreCase)
+                    => "You're using commands too quickly. Please wait a moment.",
+                var error when error.Contains("unknown", StringComparison.OrdinalIgnoreCase)
+                    => "The command failed. Please try again later.",
+                _ => "Something went wrong with that command."
+            };
         }
     }
 }
