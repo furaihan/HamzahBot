@@ -3,11 +3,6 @@ using Discord.Interactions;
 using Microsoft.Extensions.Logging;
 using ProjectAsad.Model;
 using ProjectAsad.Services;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ProjectAsad.Modules
 {
