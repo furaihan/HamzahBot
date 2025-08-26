@@ -24,11 +24,11 @@ namespace ProjectAsad.Modules
             _logger.LogInformation("MLModule initialized");
         }
 
-        [SlashCommand("clickbait", "Check if a text is clickbait")]
-        public async Task CheckClickbait([Summary(name: "text", description: "text to check")] string text)
+    [SlashCommand("clickbait", "Periksa apakah judul berita merupakan clickbait")]
+    public async Task CheckClickbait([Summary(name: "title", description: "judul berita yang akan diperiksa")] string title)
         {
             await DeferAsync(); // Defer the response as the API call might take some time
-            ClickbaitResponse? clickbaitResponse = await _zhafarServices.GetClickbaitResponseAsync(text);
+            ClickbaitResponse? clickbaitResponse = await _zhafarServices.GetClickbaitResponseAsync(title);
 
             var embedBuilder = new EmbedBuilder();
 
@@ -43,25 +43,25 @@ namespace ProjectAsad.Modules
                 var confidenceEmoji = GetConfidenceEmoji(confidencePercentage);
 
                 embedBuilder
-                    .WithTitle($"{statusEmoji} Clickbait Analysis Results")
-                    .WithDescription($"📝 **Analyzed Text:**\n> {(text.Length > 100 ? text.Substring(0, 100) + "..." : text)}")
+                    .WithTitle($"{statusEmoji} Hasil Analisis Clickbait")
+                    .WithDescription($"📝 **Teks yang dianalisis:**\n> {(title.Length > 100 ? title.Substring(0, 100) + "..." : title)}")
                     .WithColor(embedColor);
 
                 var resultValue = isClickbait
-                    ? $"**🎯 CLICKBAIT DETECTED**\nThis content appears to use clickbait tactics"
-                    : $"**📰 LEGITIMATE CONTENT**\nThis content appears to be genuine";
+                    ? $"**🎯 TERDETEKSI CLICKBAIT**\nKonten ini tampak menggunakan taktik clickbait"
+                    : $"**📰 BUKAN CLICKBAIT**\nKonten ini tampak asli";
 
-                embedBuilder.AddField($"{statusEmoji} Verdict", resultValue, false);
+                embedBuilder.AddField($"{statusEmoji} Putusan", resultValue, false);
 
                 var confidenceBar = CreateProgressBar(confidencePercentage, 10);
                 embedBuilder.AddField(
-                    $"{confidenceEmoji} Confidence Level",
+                    $"{confidenceEmoji} Tingkat Keyakinan",
                     $"**{confidencePercentage:P1}**\n{confidenceBar}\n{GetConfidenceDescription(confidencePercentage)}",
                     true
                 );
 
                 embedBuilder.AddField(
-                    "🔍 Prediction",
+                    "🔍 Prediksi",
                     $"```{clickbaitResponse.Prediction?.ToUpper()}```",
                     true
                 );
@@ -72,26 +72,26 @@ namespace ProjectAsad.Modules
                     var clickbaitProb = clickbaitResponse.ClickbaitProbability.GetValueOrDefault("1", 0.0);
 
                     embedBuilder.AddField(
-                        "📊 Probability Breakdown",
-                        $"📰 Legitimate: **{legitProb:P1}**\n🎯 Clickbait: **{clickbaitProb:P1}**",
+                        "📊 Rincian Probabilitas",
+                        $"📰 Bukan Clickbait: **{legitProb:P1}**\n🎯 Clickbait: **{clickbaitProb:P1}**",
                         false
                     );
                 }
 
                 embedBuilder
-                    .WithFooter($"✨ Analysis completed • Status: {clickbaitResponse.Status} • Powered by AI",
+                    .WithFooter($"✨ Analisis selesai • Status: {clickbaitResponse.Status} • Ditenagai oleh AI",
                                "https://cdn.discordapp.com/emojis/1234567890123456789.png") // Optional: Add your bot's icon
                     .WithCurrentTimestamp();
             }
             else
             {
                 embedBuilder
-                    .WithTitle("❌ Analysis Error")
-                    .WithDescription("🚫 **Oops! Something went wrong**\nWe encountered an issue while analyzing your text.")
+                    .WithTitle("❌ Terjadi Kesalahan Analisis")
+                    .WithDescription("🚫 **Ups! Terjadi kesalahan**\nKami mengalami masalah saat menganalisis teks Anda.")
                     .WithColor(Color.DarkRed)
-                    .AddField("📝 Your Text", $"> {(text.Length > 100 ? text.Substring(0, 100) + "..." : text)}", false)
-                    .AddField("🔧 What to do?", "• Try again in a few moments\n• Check if your text is valid\n• Contact support if the issue persists", false)
-                    .WithFooter("⚠️ Error occurred • Please try again later")
+                    .AddField("📝 Teks Anda", $"> {(title.Length > 100 ? title.Substring(0, 100) + "..." : title)}", false)
+                    .AddField("🔧 Apa yang harus dilakukan?", "• Coba lagi beberapa saat lagi\n• Periksa apakah teks Anda valid\n• Hubungi dukungan jika masalah berlanjut", false)
+                    .WithFooter("⚠️ Terjadi kesalahan • Silakan coba lagi nanti")
                     .WithCurrentTimestamp();
             }
 
